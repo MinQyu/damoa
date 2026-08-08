@@ -26,8 +26,8 @@ export async function searchDanawa(query: string): Promise<SearchResultItem[]> {
     if (!title) return;
 
     const imageUrl =
-      item.find(IMG_SELECTOR).attr("src") ??
       item.find(IMG_SELECTOR).attr("data-src") ??
+      item.find(IMG_SELECTOR).attr("src") ??
       null;
 
     const specSummary = item

@@ -25,9 +25,12 @@ export async function searchDanawa(query: string): Promise<SearchResultItem[]> {
     const title = item.find(NAME_SELECTOR).text().trim();
     if (!title) return;
 
+    // 다나와 검색 결과는 스크롤 시 이미지를 지연 로딩한다.
+    // 화면 하단 상품은 src에 noImg 플레이스홀더가 들어있고 실제 URL은 data-src에 있으므로
+    // data-src를 우선 사용해야 한다.
     const imageUrl =
-      item.find(IMG_SELECTOR).attr("src") ??
       item.find(IMG_SELECTOR).attr("data-src") ??
+      item.find(IMG_SELECTOR).attr("src") ??
       null;
 
     const specSummary = item

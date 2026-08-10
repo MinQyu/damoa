@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import SearchBar from "@/components/SearchBar";
 import ProductCard from "@/components/ProductCard";
@@ -13,13 +14,27 @@ async function fetchSearchResults(query: string): Promise<SearchResultItem[]> {
 }
 
 export default function Home() {
-  const [query, setQuery] = useState("");
+  return (
+    <Suspense>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function HomeContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const query = searchParams.get("q") ?? "";
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["search", query],
     queryFn: () => fetchSearchResults(query),
     enabled: query.length > 0,
   });
+
+  const handleSearch = (next: string) => {
+    router.push(`/?q=${encodeURIComponent(next)}`);
+  };
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-16">
@@ -30,7 +45,7 @@ export default function Home() {
         </p>
       </div>
 
-      <SearchBar onSearch={setQuery} initialQuery={query} />
+      <SearchBar key={query} onSearch={handleSearch} initialQuery={query} />
 
       {isLoading && <p className="text-center text-sm text-neutral-500">검색 중...</p>}
       {isError && (
@@ -44,7 +59,7 @@ export default function Home() {
 
       <div className="flex flex-col gap-3">
         {data?.map((item) => (
-          <ProductCard key={item.id} item={item} />
+          <ProductCard key={item.id} item={item} query={query} />
         ))}
       </div>
     </main>

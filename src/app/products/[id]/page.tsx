@@ -1,7 +1,9 @@
 "use client";
 
+import { Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import PriceComparisonTable from "@/components/PriceComparisonTable";
 import { ProductPriceComparison } from "@/lib/types";
 
@@ -12,15 +14,27 @@ async function fetchPriceComparison(id: string): Promise<ProductPriceComparison>
 }
 
 export default function ProductDetailPage({ params }: { params: { id: string } }) {
+  return (
+    <Suspense>
+      <ProductDetailContent id={params.id} />
+    </Suspense>
+  );
+}
+
+function ProductDetailContent({ id }: { id: string }) {
+  const searchParams = useSearchParams();
+  const query = searchParams.get("q");
+  const backHref = query ? `/?q=${encodeURIComponent(query)}` : "/";
+
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["priceComparison", params.id],
-    queryFn: () => fetchPriceComparison(params.id),
+    queryKey: ["priceComparison", id],
+    queryFn: () => fetchPriceComparison(id),
   });
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-16">
-      <Link href="/" className="text-sm text-neutral-500 hover:underline">
-        ← 검색으로 돌아가기
+      <Link href={backHref} className="text-sm text-neutral-500 hover:underline">
+        ← 검색 결과로 돌아가기
       </Link>
 
       <div>

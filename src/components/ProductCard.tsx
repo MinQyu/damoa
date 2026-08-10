@@ -1,10 +1,20 @@
 import Link from "next/link";
 import { SearchResultItem } from "@/lib/types";
 
-export default function ProductCard({ item }: { item: SearchResultItem }) {
+export default function ProductCard({
+  item,
+  query,
+}: {
+  item: SearchResultItem;
+  query?: string;
+}) {
+  const href = query
+    ? `/products/${item.id}?q=${encodeURIComponent(query)}`
+    : `/products/${item.id}`;
+
   return (
     <Link
-      href={`/products/${item.id}`}
+      href={href}
       className="flex gap-4 rounded-xl border border-neutral-200 p-4 transition hover:border-neutral-400 hover:shadow-sm dark:border-neutral-800"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}

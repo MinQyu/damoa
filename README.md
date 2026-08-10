@@ -12,6 +12,7 @@
 - Tailwind CSS
 - Tanstack React Query (클라이언트 데이터 패칭/캐싱)
 - cheerio (HTML 파싱)
+- puppeteer (백그라운드 Chrome에 CDP로 연결해 쿠팡/G마켓/옥션 봇 탐지 우회)
 
 ## 프로젝트 구조
 
@@ -28,6 +29,7 @@ src/
   lib/
     danawa.ts                      다나와 검색/URL 추출 로직
     vendors/                       오픈마켓별 가격 크롤러 어댑터
+    browserSession.ts              백그라운드 Chrome CDP 연결 관리 (봇 탐지 우회)
     cache.ts                       메모리 TTL 캐시
     http.ts, types.ts
 ```

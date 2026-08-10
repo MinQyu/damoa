@@ -35,7 +35,7 @@ Next.js 14 App Router + TypeScript, Tailwind CSS, 클라이언트 데이터 페�
 
 모든 어댑터는 각 사이트가 가격 데이터를 어떻게 구조화하든(예: 11번가는 `og:description` 메타 + 취소선 엘리먼트를 통해 `originalPrice`/`couponDiscount` 분리 정보를 노출하지만, 다른 사이트는 단일 가격만 노출할 수 있음) 공통 `VendorPriceResult` 형태(`lib/types.ts`)로 정규화한다. `status`는 `success | failed | unavailable` 중 하나다 — `unavailable`은 애초에 벤더 URL이 존재하지 않았음을, `failed`는 fetch/parse 시도 자체가 깨졌음을 의미한다.
 
-**알려진 한계 (`README.md`의 "구현 현황" 참고):** 쿠팡과 지마켓 스크래핑은 현재 막혀 있다 — 일반 `fetch`와 헤드리스 브라우저(puppeteer) 요청 모두 봇 탐지에 걸려 403이 반환된다. 해당 어댑터(`coupang.ts`, `gmarket.ts`)는 의도적으로 fetch 시도만 하고 깔끔하게 `failed` 결과를 반환할 뿐, 파싱은 하지 않는다(검증할 HTML 자체가 없기 때문). 현재 실제로 SSR 스크래핑/파싱에 성공하는 벤더는 11번가(`elevenst.ts`)뿐이다. 옥션(`auction.ts`)이 정상 동작한다고 가정하기 전에 현재 상태를 확인해야 한다. 벤더 스크래핑 수정을 요청받는다면, 단순한 셀렉터 수정이 아니라 스텔스/안티 디텍션 기법, 프록시, 또는 공식 파트너 API가 필요할 가능성이 높다.
+**쿠팡/G마켓/옥션 봇 탐지 우회 (`lib/browserSession.ts`):** 일반 `fetch`와 puppeteer가 직접 `launch()`한 headless 브라우저 요청은 모두 봇 탐지에 걸려 403이 반환된다. 대신 사용자 백그라운드에 실제(headless가 아닌) Chrome을 `--remote-debugging-port`로 띄워두고 `puppeteer.connect()`로 CDP 연결해 접근하면 통과된다(2026-08 검증). `getBrowser()`/`withVendorPage()`가 이 연결을 관리한다 — 필요 시 Chrome을 자동으로 새로 띄우고, 화면 밖(`--window-position`)에 배치해 사용자 작업을 방해하지 않으며, Next.js 서버와 분리(detached)되어 서버 재시작 후에도 살아있는다(콜드 스타트로 인한 반복적인 봇 확인 페이지를 줄이기 위함). `coupang.ts`/`gmarket.ts`/`auction.ts`는 이 세션 위에서 `page.$eval`로 실제 렌더링된 DOM에서 가격을 추출한다. G마켓은 첫 진입 시 "봇 확인 중" 인터스티셜이 뜰 수 있어 `waitForRealPage()`로 통과를 기다린 뒤 파싱한다. 이 우회는 시점/IP/세션에 따라 다시 막힐 수 있으므로 상시 보장되는 것은 아니다 — 벤더 스크래핑이 다시 깨진다면 셀렉터뿐 아니라 이 봇 탐지 우회 자체가 막혔을 가능성도 함께 확인해야 한다.
 
 ### 캐싱 (`lib/cache.ts`)
 

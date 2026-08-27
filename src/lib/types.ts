@@ -20,12 +20,22 @@ export type VendorUrls = Record<VendorKey, string | null>;
 
 export type VendorPriceStatus = "success" | "failed" | "unavailable";
 
+/**
+ * "card": 특정 카드사 결제 시 즉시할인(cardName에 카드사명이 채워짐).
+ * "payment": 카드사를 특정할 수 없는 결제수단(스마일페이 등) 즉시할인.
+ * "coupon": 쿠폰 적용가로 인한 할인.
+ * "none": 할인 없음(표시가 그대로가 실구매가).
+ */
+export type DiscountType = "card" | "payment" | "coupon" | "none";
+
 export interface VendorPriceResult {
   vendor: VendorKey;
   vendorName: string;
   status: VendorPriceStatus;
   originalPrice: number | null;
   couponDiscount: number | null;
+  discountType: DiscountType;
+  cardName: string | null;
   shippingFee: number | null;
   finalPrice: number | null;
   productUrl: string | null;

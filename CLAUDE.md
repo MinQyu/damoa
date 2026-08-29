@@ -31,11 +31,11 @@ Next.js 14 App Router + TypeScript, Tailwind CSS, 클라이언트 데이터 페�
 
 ### 벤더 어댑터 (`lib/vendors/`)
 
-각 벤더는 공통 `VendorAdapter` 타입(`lib/vendors/types.ts`)을 구현하는 자체 파일(`coupang.ts`, `gmarket.ts`, `auction.ts`, `elevenst.ts`)을 가진다: `(url: string) => Promise<VendorPriceResult>`. 이들은 `lib/vendors/index.ts#VENDOR_ADAPTERS`에 등록된다. 벤더를 새로 추가하려면: `lib/types.ts`에 `VendorKey`를 추가하고, 라벨을 추가한 뒤, 어댑터 파일을 작성하고, `lib/vendors/index.ts`의 index map에 등록한다.
+각 벤더는 공통 `VendorAdapter` 타입(`lib/vendors/types.ts`)을 구현하는 자체 파일(`coupang.ts`, `gmarket.ts`, `auction.ts`, `elevenst.ts`)을 가진다: `(url: string) => Promise<VendorPriceResult>`. 이들은 `lib/vendors/index.ts#VENDOR_ADAPTERS`에 등록된다. 새 벤더를 엔드투엔드로 추가하는 절차는 `add-vendor` 스킬을 참고한다.
 
 모든 어댑터는 각 사이트가 가격 데이터를 어떻게 구조화하든(예: 11번가는 `og:description` 메타 + 취소선 엘리먼트를 통해 `originalPrice`/`couponDiscount` 분리 정보를 노출하지만, 다른 사이트는 단일 가격만 노출할 수 있음) 공통 `VendorPriceResult` 형태(`lib/types.ts`)로 정규화한다. `status`는 `success | failed | unavailable` 중 하나다 — `unavailable`은 애초에 벤더 URL이 존재하지 않았음을, `failed`는 fetch/parse 시도 자체가 깨졌음을 의미한다.
 
-**쿠팡/G마켓/옥션 봇 탐지 우회 (`lib/browserSession.ts`):** 일반 `fetch`와 puppeteer가 직접 `launch()`한 headless 브라우저 요청은 모두 봇 탐지에 걸려 403이 반환된다. 대신 사용자 백그라운드에 실제(headless가 아닌) Chrome을 `--remote-debugging-port`로 띄워두고 `puppeteer.connect()`로 CDP 연결해 접근하면 통과된다(2026-08 검증). `getBrowser()`/`withVendorPage()`가 이 연결을 관리한다 — 필요 시 Chrome을 자동으로 새로 띄우고, 화면 밖(`--window-position`)에 배치해 사용자 작업을 방해하지 않으며, Next.js 서버와 분리(detached)되어 서버 재시작 후에도 살아있는다(콜드 스타트로 인한 반복적인 봇 확인 페이지를 줄이기 위함). `coupang.ts`/`gmarket.ts`/`auction.ts`는 이 세션 위에서 `page.$eval`로 실제 렌더링된 DOM에서 가격을 추출한다. G마켓은 첫 진입 시 "봇 확인 중" 인터스티셜이 뜰 수 있어 `waitForRealPage()`로 통과를 기다린 뒤 파싱한다. 이 우회는 시점/IP/세션에 따라 다시 막힐 수 있으므로 상시 보장되는 것은 아니다 — 벤더 스크래핑이 다시 깨진다면 셀렉터뿐 아니라 이 봇 탐지 우회 자체가 막혔을 가능성도 함께 확인해야 한다.
+쿠팡/G마켓/옥션은 일반 `fetch`나 headless 브라우저로 접근하면 봇 탐지에 걸려 403이 반환되므로, `lib/browserSession.ts`가 사용자 백그라운드의 실제 Chrome에 CDP로 연결해 우회한다. 이 메커니즘과 트러블슈팅은 `vendor-bot-bypass` 스킬을 참고한다.
 
 ### 캐싱 (`lib/cache.ts`)
 
@@ -52,49 +52,6 @@ Next.js 14 App Router + TypeScript, Tailwind CSS, 클라이언트 데이터 페�
 - `components/QueryProvider.tsx` — 앱을 `QueryClientProvider`(5분 `staleTime`, retry: 1)와 React Query Devtools로 감싸며, `app/layout.tsx`에 마운트되어 있다.
 - 경로 별칭 `@/*` → `src/*` (`tsconfig.json` 참고).
 
-### 새 벤더 엔드투엔드로 추가하기
-
-1. `lib/types.ts`의 `VendorKey`와 `VENDOR_LABELS`에 벤더를 추가한다.
-2. `lib/danawa.ts`의 `VENDOR_ALT_MAP`(다나와 상세 페이지에서 해당 벤더 블록을 식별하는 데 사용)에 다나와 `alt` 텍스트 매핑을 추가하고, `fetchVendorUrls`에 URL 구성 분기를 추가한다.
-3. `VendorAdapter`를 구현하는 `lib/vendors/<vendor>.ts`를 작성하여 공통 `VendorPriceResult` 형태를 반환하게 한다.
-4. `lib/vendors/index.ts`의 `VENDOR_ADAPTERS`(및 라벨 map)에 어댑터를 등록한다.
-
 ## 커밋 메시지 컨벤션
 
-이 저장소의 커밋 메시지를 작성할 때(사용자가 커밋을 요청한 경우) 아래 형식을 따른다.
-
-**제목 (첫 줄)**
-- `type: 설명` 형식으로 쓴다. type은 아래 목록 중 변경의 성격에 가장 맞는 것을 고른다.
-- 설명은 한국어, **명사형으로 종결**한다 (예: "...구현", "...작성", "...수정", "...추가", "...제거", "...정리"). 평서문("...했습니다", "...합니다")으로 끝내지 않는다.
-- 마침표를 붙이지 않는다.
-- 무엇을 변경했는지 하나의 요약으로 표현한다. 여러 성격의 변경을 억지로 한 줄에 욱여넣지 않는다 — type이 여러 개 필요하다면 커밋을 나누는 것을 고려한다.
-
-**type 목록**
-- `feat`: 새로운 기능 추가
-- `fix`: 버그 수정
-- `refactor`: 동작 변화 없는 코드 구조 개선
-- `docs`: 문서(`README.md`, `CLAUDE.md`, `CONVENTIONS.md`, `overview.md` 등)만 변경
-- `style`: 포맷팅 등 코드 의미에 영향 없는 변경
-- `test`: 테스트 추가/수정
-- `chore`: 빌드/설정/의존성 등 그 외 잡무성 변경
-
-**본문 (변경 사항이 여러 갈래일 때만 작성)**
-- 빈 줄로 제목과 구분한다.
-- `-`로 시작하는 불릿 리스트로 나열하고, 각 항목도 명사형으로 종결한다.
-- 코드만 봐서는 드러나지 않는 "왜"가 있다면 본문에 적는다. "무엇을 했는지"는 diff로 알 수 있으므로 되풀이하지 않는다.
-
-**예시**:
-```
-docs: CLAUDE.md를 한국어로 작성
-```
-```
-feat: Damoa 실구매가 비교 서비스 초기 구현
-
-- 다나와 검색 및 오픈마켓(쿠팡/G마켓/옥션/11번가) 판매처 URL 추출
-- 11번가 실구매가(쿠폰 할인 반영) 크롤링
-- 쿠팡/G마켓/옥션은 봇 차단으로 조회 실패를 정상적으로 반환 (Promise.allSettled 기반 병렬 조회)
-- 검색/판매처URL/가격 결과 메모리 TTL 캐시
-- 검색 → 가격 비교 페이지 UI (Next.js App Router + Tailwind + React Query)
-```
-
-커밋을 생성할 때는 이 형식에 맞춰 제목(및 필요하면 본문)을 자동으로 작성한다. 그 외 커밋 생성 절차(Co-Authored-By 트레일러 포함 여부 등)는 시스템 지침을 따른다.
+커밋 메시지를 작성할 때(사용자가 커밋을 요청한 경우)는 `commit-message` 스킬을 참고한다.

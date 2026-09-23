@@ -18,7 +18,11 @@ export const VENDOR_LABELS: Record<VendorKey, string> = {
 
 export type VendorUrls = Record<VendorKey, string | null>;
 
-export type VendorPriceStatus = "success" | "failed" | "unavailable";
+/**
+ * "pending"은 서버가 내리는 상태가 아니라, 스트리밍 조회 중 아직 해당 벤더의
+ * 결과가 도착하지 않았을 때 클라이언트가 채워 넣는 임시 상태다.
+ */
+export type VendorPriceStatus = "success" | "failed" | "unavailable" | "pending";
 
 /**
  * "card": 특정 카드사 결제 시 즉시할인(cardName에 카드사명이 채워짐).

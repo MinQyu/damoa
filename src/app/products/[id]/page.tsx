@@ -1,16 +1,33 @@
 "use client";
 
-import { Suspense } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import PriceComparisonTable from "@/components/PriceComparisonTable";
-import { ProductPriceComparison } from "@/lib/types";
+import { ProductPriceComparison, VENDOR_LABELS, VendorKey, VendorPriceResult } from "@/lib/types";
 
-async function fetchPriceComparison(id: string): Promise<ProductPriceComparison> {
-  const res = await fetch(`/api/products/${id}/prices`);
-  if (!res.ok) throw new Error("가격 비교 정보를 가져오지 못했습니다.");
-  return res.json();
+const VENDOR_KEYS = Object.keys(VENDOR_LABELS) as VendorKey[];
+
+function pendingResult(vendor: VendorKey): VendorPriceResult {
+  return {
+    vendor,
+    vendorName: VENDOR_LABELS[vendor],
+    status: "pending",
+    originalPrice: null,
+    couponDiscount: null,
+    discountType: "none",
+    cardName: null,
+    shippingFee: null,
+    finalPrice: null,
+    productUrl: null,
+  };
+}
+
+function initialResults(): Record<VendorKey, VendorPriceResult> {
+  return Object.fromEntries(VENDOR_KEYS.map((vendor) => [vendor, pendingResult(vendor)])) as Record<
+    VendorKey,
+    VendorPriceResult
+  >;
 }
 
 export default function ProductDetailPage({ params }: { params: { id: string } }) {
@@ -26,10 +43,47 @@ function ProductDetailContent({ id }: { id: string }) {
   const query = searchParams.get("q");
   const backHref = query ? `/?q=${encodeURIComponent(query)}` : "/";
 
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["priceComparison", id],
-    queryFn: () => fetchPriceComparison(id),
-  });
+  const [results, setResults] = useState<Record<VendorKey, VendorPriceResult>>(initialResults);
+  const [lowestPrice, setLowestPrice] = useState<VendorPriceResult | null>(null);
+  const [streamError, setStreamError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setResults(initialResults());
+    setLowestPrice(null);
+    setStreamError(null);
+
+    const source = new EventSource(`/api/products/${id}/prices/stream`);
+
+    source.addEventListener("vendor", (event) => {
+      const result: VendorPriceResult = JSON.parse((event as MessageEvent).data);
+      setResults((prev) => ({ ...prev, [result.vendor]: result }));
+    });
+
+    source.addEventListener("done", (event) => {
+      const comparison: ProductPriceComparison = JSON.parse((event as MessageEvent).data);
+      setLowestPrice(comparison.lowestPrice);
+      source.close();
+    });
+
+    source.addEventListener("error", (event) => {
+      const messageEvent = event as MessageEvent;
+      if (messageEvent.data) {
+        const payload = JSON.parse(messageEvent.data);
+        setStreamError(payload.message ?? "가격 비교에 실패했습니다.");
+      } else {
+        setStreamError("가격 비교 서버와의 연결이 끊어졌습니다.");
+      }
+      source.close();
+    });
+
+    return () => source.close();
+  }, [id]);
+
+  const data: ProductPriceComparison = {
+    productId: Number(id),
+    results: VENDOR_KEYS.map((vendor) => results[vendor]),
+    lowestPrice,
+  };
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-16">
@@ -44,17 +98,8 @@ function ProductDetailContent({ id }: { id: string }) {
         </p>
       </div>
 
-      {isLoading && (
-        <p className="text-center text-sm text-neutral-500">
-          판매처별 가격을 조회하는 중입니다...
-        </p>
-      )}
-      {isError && (
-        <p className="text-center text-sm text-red-500">
-          {error instanceof Error ? error.message : "오류가 발생했습니다."}
-        </p>
-      )}
-      {data && <PriceComparisonTable data={data} />}
+      {streamError && <p className="text-center text-sm text-red-500">{streamError}</p>}
+      <PriceComparisonTable data={data} />
     </main>
   );
 }

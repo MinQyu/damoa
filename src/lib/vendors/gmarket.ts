@@ -2,6 +2,7 @@ import { parseWonAmount } from "../http";
 import { VendorPriceResult } from "../types";
 import { VendorAdapter } from "./types";
 import { withVendorPage, waitForRealPage } from "../browserSession";
+import { extractCardName, resolveInstantDiscountType } from "./discount";
 
 const ORIGINAL_PRICE_SELECTOR = ".price_real";
 const PAYMENT_DISCOUNT_SELECTOR = ".box__payment-discount:not(.box__payment-discount--reward)";
@@ -32,8 +33,11 @@ export const fetchGmarketPrice: VendorAdapter = async (url) => {
         .$eval(PAYMENT_DISCOUNT_SELECTOR, (el) => el.textContent ?? "")
         .catch(() => null);
       const discountPrice = parseWonAmount(discountText);
-      const finalPrice = discountPrice && discountPrice < originalPrice ? discountPrice : originalPrice;
+      const hasInstantDiscount = discountPrice !== null && discountPrice < originalPrice;
+      const finalPrice = hasInstantDiscount ? discountPrice : originalPrice;
       const couponDiscount = originalPrice - finalPrice;
+      const cardName = hasInstantDiscount ? extractCardName(discountText ?? "") : null;
+      const discountType = hasInstantDiscount ? resolveInstantDiscountType(cardName) : "none";
 
       const deliveryText = await page
         .$eval(DELIVERY_SELECTOR, (el) => el.textContent ?? "")
@@ -46,6 +50,8 @@ export const fetchGmarketPrice: VendorAdapter = async (url) => {
         status: "success",
         originalPrice,
         couponDiscount,
+        discountType,
+        cardName,
         shippingFee,
         finalPrice: finalPrice + (shippingFee ?? 0),
         productUrl: url,
@@ -64,6 +70,8 @@ function failedResult(url: string, error: string): VendorPriceResult {
     status: "failed",
     originalPrice: null,
     couponDiscount: null,
+    discountType: "none",
+    cardName: null,
     shippingFee: null,
     finalPrice: null,
     productUrl: url,

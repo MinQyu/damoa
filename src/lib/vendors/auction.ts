@@ -1,17 +1,21 @@
 import { parseWonAmount } from "../http";
-import { VendorPriceResult } from "../types";
+import { DiscountType, VendorPriceResult } from "../types";
 import { VendorAdapter } from "./types";
 import { withVendorPage, waitForRealPage } from "../browserSession";
+import { extractCardName, resolveInstantDiscountType } from "./discount";
 
-const ORIGINAL_PRICE_SELECTOR = ".price_real";
+const ORIGINAL_PRICE_SELECTOR = ".price_real, .price_original";
 const COUPON_PRICE_SELECTOR = ".price_coupon";
+const PAYMENT_DISCOUNT_SELECTOR = ".box__payment-discount:not(.box__payment-discount--reward)";
 const DELIVERY_SELECTOR = '[class*="delivery-info"]';
 
 /**
- * 옥션은 G마켓과 같은 이베이코리아 인프라를 쓴다. 판매가(.price_real) 대비
- * 쿠폰적용가(.price_coupon)가 더 낮으면 그걸 실구매가로 본다. 활성 쿠폰이 없는
- * 상품은 쿠폰적용가가 판매가와 같거나 요소 자체가 없어 판매가를 그대로 쓴다.
- * (2026-08 검증, browserSession.ts 참고)
+ * 옥션은 G마켓과 같은 이베이코리아 인프라를 써서 두 종류의 할인이 각각 따로 걸릴 수 있다:
+ * 쿠폰적용가(.price_coupon)와 카드/결제수단 즉시할인가(.box__payment-discount, G마켓과 동일
+ * 마크업). 둘 다 있으면 실제로 더 싸게 사는 쪽(더 낮은 가격)을 실구매가로 채택한다. 활성
+ * 쿠폰/즉시할인이 없는 상품은 각 selector가 없거나 판매가와 같아 판매가를 그대로 쓴다.
+ * 정가 표시도 상품/카테고리별로 마크업이 달라 가전 등은 .price_real, 패션 등은
+ * .price_original을 쓴다(2026-08 여러 카테고리 상품 크롤링으로 확인, browserSession.ts 참고).
  */
 export const fetchAuctionPrice: VendorAdapter = async (url) => {
   try {
@@ -32,7 +36,27 @@ export const fetchAuctionPrice: VendorAdapter = async (url) => {
         .$eval(COUPON_PRICE_SELECTOR, (el) => el.textContent ?? "")
         .catch(() => null);
       const couponPrice = parseWonAmount(couponText);
-      const finalPrice = couponPrice && couponPrice < originalPrice ? couponPrice : originalPrice;
+
+      const paymentDiscountText = await page
+        .$eval(PAYMENT_DISCOUNT_SELECTOR, (el) => el.textContent ?? "")
+        .catch(() => null);
+      const paymentDiscountPrice = parseWonAmount(paymentDiscountText);
+
+      let finalPrice = originalPrice;
+      let discountType: DiscountType = "none";
+      let cardName: string | null = null;
+
+      if (paymentDiscountPrice !== null && paymentDiscountPrice < finalPrice) {
+        finalPrice = paymentDiscountPrice;
+        cardName = extractCardName(paymentDiscountText ?? "");
+        discountType = resolveInstantDiscountType(cardName);
+      }
+      if (couponPrice !== null && couponPrice < finalPrice) {
+        finalPrice = couponPrice;
+        cardName = null;
+        discountType = "coupon";
+      }
+
       const couponDiscount = originalPrice - finalPrice;
 
       const deliveryText = await page
@@ -46,6 +70,8 @@ export const fetchAuctionPrice: VendorAdapter = async (url) => {
         status: "success",
         originalPrice,
         couponDiscount,
+        discountType,
+        cardName,
         shippingFee,
         finalPrice: finalPrice + (shippingFee ?? 0),
         productUrl: url,
@@ -64,6 +90,8 @@ function failedResult(url: string, error: string): VendorPriceResult {
     status: "failed",
     originalPrice: null,
     couponDiscount: null,
+    discountType: "none",
+    cardName: null,
     shippingFee: null,
     finalPrice: null,
     productUrl: url,

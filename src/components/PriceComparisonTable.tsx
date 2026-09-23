@@ -10,6 +10,13 @@ function StatusBadge({ status }: { status: VendorPriceResult["status"] }) {
   return <span className="text-red-500">✕ 조회 실패</span>;
 }
 
+function formatDiscountType(r: VendorPriceResult) {
+  if (r.discountType === "card") return `카드할인 (${r.cardName})`;
+  if (r.discountType === "payment") return "결제수단 할인";
+  if (r.discountType === "coupon") return "쿠폰할인";
+  return "-";
+}
+
 export default function PriceComparisonTable({ data }: { data: ProductPriceComparison }) {
   return (
     <div className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800">
@@ -19,7 +26,8 @@ export default function PriceComparisonTable({ data }: { data: ProductPriceCompa
             <th className="px-4 py-3 font-medium">판매처</th>
             <th className="px-4 py-3 font-medium">상태</th>
             <th className="px-4 py-3 font-medium">표시가</th>
-            <th className="px-4 py-3 font-medium">쿠폰할인</th>
+            <th className="px-4 py-3 font-medium">할인액</th>
+            <th className="px-4 py-3 font-medium">할인 종류</th>
             <th className="px-4 py-3 font-medium">실구매가</th>
             <th className="px-4 py-3 font-medium">이동</th>
           </tr>
@@ -48,6 +56,7 @@ export default function PriceComparisonTable({ data }: { data: ProductPriceCompa
                 <td className="px-4 py-3">
                   {r.couponDiscount ? `-${r.couponDiscount.toLocaleString()}원` : "-"}
                 </td>
+                <td className="px-4 py-3">{formatDiscountType(r)}</td>
                 <td className="px-4 py-3 font-semibold">
                   {r.finalPrice ? `${r.finalPrice.toLocaleString()}원` : "-"}
                 </td>

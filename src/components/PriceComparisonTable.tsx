@@ -4,6 +4,9 @@ function StatusBadge({ status }: { status: VendorPriceResult["status"] }) {
   if (status === "success") {
     return <span className="text-green-600">✓ 확인됨</span>;
   }
+  if (status === "pending") {
+    return <span className="animate-pulse text-neutral-400">● 가격 확인 중...</span>;
+  }
   if (status === "unavailable") {
     return <span className="text-neutral-400">– 판매처 없음</span>;
   }

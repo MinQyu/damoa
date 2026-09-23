@@ -27,7 +27,7 @@ Next.js 14 App Router + TypeScript, Tailwind CSS, 클라이언트 데이터 페�
 
 1. **검색** (`/` → `GET /api/search?q=`) — `lib/danawa.ts#searchDanawa`가 cheerio로 `search.danawa.com`을 스크래핑하여 `SearchResultItem[]`을 반환한다 (id는 다나와의 `pcode`).
 2. **벤더 URL 확인** (`GET /api/products/[id]/urls`) — `lib/danawa.ts#fetchVendorUrls`가 다나와 상품 상세 페이지(`prod.danawa.com/info/?pcode=`)를 로드하여 "구매하기" 판매처 목록에서 각 오픈마켓의 `link_pcode`를 추출한다. 쿠팡은 브리지 URL을 한 번 더 거쳐 `pageKey`를 실제 상품 URL로 변환해야 한다(`resolveCoupangProductUrl`). 이 라우트는 대부분 `/prices`에서 대체되었는데, 이 라우트가 내부적으로 동일한 URL 확인 작업을 수행하기 때문이다.
-3. **가격 비교** (`/products/[id]` → `GET /api/products/[id]/prices`) — (캐시된) 벤더 URL을 확인한 뒤 `lib/vendors#fetchAllVendorPrices`를 호출한다. 이 함수는 **`Promise.allSettled`로 모든 벤더 어댑터를 병렬 실행**하여 한 벤더가 실패하거나 타임아웃되어도 다른 벤더를 막지 않도록 한다. 결과는 `status === "success"`인 항목들 중 `finalPrice`가 가장 낮은 `lowestPrice`로 집계된다.
+3. **가격 비교** (`/products/[id]` → `GET /api/products/[id]/prices/stream`) — (캐시된) 벤더 URL을 확인한 뒤 `lib/vendors#streamVendorPrices`를 호출한다. 이 함수는 모든 벤더 어댑터를 병렬 실행하여 한 벤더가 실패하거나 타임아웃되어도 다른 벤더를 막지 않으며, 벤더 하나가 끝날 때마다 결과를 콜백으로 즉시 넘겨 SSE `vendor` 이벤트로 스트리밍한다. 프론트엔드는 각 벤더를 `pending` 상태로 먼저 그린 뒤 이 이벤트를 받아 갱신한다. 전체가 끝나면 `status === "success"`인 항목들 중 `finalPrice`가 가장 낮은 `lowestPrice`를 계산해 `done` 이벤트로 보낸다. 한 번에 전체 JSON을 반환하는 `GET /api/products/[id]/prices`(`fetchAllVendorPrices`)도 다른 소비처를 위해 유지된다 — 두 라우트 모두 `lib/vendors/index.ts`의 `resolveVendorPrice`/`computeLowestPrice`를 공유한다.
 
 ### 벤더 어댑터 (`lib/vendors/`)
 
@@ -48,7 +48,7 @@ Next.js 14 App Router + TypeScript, Tailwind CSS, 클라이언트 데이터 페�
 ### 프론트엔드
 
 - `app/page.tsx` — 검색 페이지, 클라이언트 컴포넌트, 원본 쿼리 문자열을 키로 사용하는(디바운스 없는) `useQuery`이며 쿼리가 비어있지 않을 때만 활성화된다.
-- `app/products/[id]/page.tsx` — 가격 비교 페이지, 마운트 시 `/api/products/[id]/prices`를 호출한다.
+- `app/products/[id]/page.tsx` — 가격 비교 페이지, 마운트 시 `EventSource`로 `/api/products/[id]/prices/stream`을 구독해 벤더별 상태를 실시간으로 갱신한다.
 - `components/QueryProvider.tsx` — 앱을 `QueryClientProvider`(5분 `staleTime`, retry: 1)와 React Query Devtools로 감싸며, `app/layout.tsx`에 마운트되어 있다.
 - 경로 별칭 `@/*` → `src/*` (`tsconfig.json` 참고).
 

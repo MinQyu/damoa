@@ -16,7 +16,7 @@ function pendingResult(vendor: VendorKey): VendorPriceResult {
     originalPrice: null,
     couponDiscount: null,
     discountType: "none",
-    cardName: null,
+    conditionalDiscount: null,
     shippingFee: null,
     finalPrice: null,
     productUrl: null,
@@ -45,11 +45,13 @@ function ProductDetailContent({ id }: { id: string }) {
 
   const [results, setResults] = useState<Record<VendorKey, VendorPriceResult>>(initialResults);
   const [lowestPrice, setLowestPrice] = useState<VendorPriceResult | null>(null);
+  const [lowestConditionalPrice, setLowestConditionalPrice] = useState<VendorPriceResult | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
 
   useEffect(() => {
     setResults(initialResults());
     setLowestPrice(null);
+    setLowestConditionalPrice(null);
     setStreamError(null);
 
     const source = new EventSource(`/api/products/${id}/prices/stream`);
@@ -62,6 +64,7 @@ function ProductDetailContent({ id }: { id: string }) {
     source.addEventListener("done", (event) => {
       const comparison: ProductPriceComparison = JSON.parse((event as MessageEvent).data);
       setLowestPrice(comparison.lowestPrice);
+      setLowestConditionalPrice(comparison.lowestConditionalPrice);
       source.close();
     });
 
@@ -83,6 +86,7 @@ function ProductDetailContent({ id }: { id: string }) {
     productId: Number(id),
     results: VENDOR_KEYS.map((vendor) => results[vendor]),
     lowestPrice,
+    lowestConditionalPrice,
   };
 
   return (

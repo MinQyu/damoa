@@ -39,7 +39,7 @@ function unavailableResult(vendor: VendorKey): VendorPriceResult {
     originalPrice: null,
     couponDiscount: null,
     discountType: "none",
-    cardName: null,
+    conditionalDiscount: null,
     shippingFee: null,
     finalPrice: null,
     productUrl: null,
@@ -54,7 +54,7 @@ function failedResult(vendor: VendorKey, url: string | null, error: unknown): Ve
     originalPrice: null,
     couponDiscount: null,
     discountType: "none",
-    cardName: null,
+    conditionalDiscount: null,
     shippingFee: null,
     finalPrice: null,
     productUrl: url,
@@ -85,6 +85,33 @@ function computeLowestPrice(results: VendorPriceResult[]): VendorPriceResult | n
 }
 
 /**
+ * 조건부 할인은 사용자마다 적용 여부가 달라 최저가 판정에서는 빼되, 그 결제수단을 가진
+ * 사용자에게는 더 싼 선택지가 되므로 공통 최저가보다 낮을 때만 따로 알려준다.
+ */
+function computeLowestConditionalPrice(
+  results: VendorPriceResult[],
+  lowestPrice: VendorPriceResult | null
+): VendorPriceResult | null {
+  const threshold = lowestPrice?.finalPrice ?? Infinity;
+  return results
+    .filter((r) => r.status === "success" && r.conditionalDiscount && r.conditionalDiscount.price < threshold)
+    .reduce<VendorPriceResult | null>((lowest, current) => {
+      if (!lowest) return current;
+      return current.conditionalDiscount!.price < lowest.conditionalDiscount!.price ? current : lowest;
+    }, null);
+}
+
+function buildComparison(productId: number, results: VendorPriceResult[]): ProductPriceComparison {
+  const lowestPrice = computeLowestPrice(results);
+  return {
+    productId,
+    results,
+    lowestPrice,
+    lowestConditionalPrice: computeLowestConditionalPrice(results, lowestPrice),
+  };
+}
+
+/**
  * 오픈마켓별 실구매가 조회를 병렬로 실행하고, 일부가 실패해도 나머지 결과는
  * 정상적으로 반환한다 (overview.md 7절 "비동기 데이터 처리" 참고).
  */
@@ -95,7 +122,7 @@ export async function fetchAllVendorPrices(
   const vendors = Object.keys(vendorUrls) as VendorKey[];
   const results = await Promise.all(vendors.map((vendor) => resolveVendorPrice(vendor, vendorUrls[vendor])));
 
-  return { productId, results, lowestPrice: computeLowestPrice(results) };
+  return buildComparison(productId, results);
 }
 
 /**
@@ -118,5 +145,5 @@ export async function streamVendorPrices(
     })
   );
 
-  return { productId, results, lowestPrice: computeLowestPrice(results) };
+  return buildComparison(productId, results);
 }

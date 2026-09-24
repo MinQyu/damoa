@@ -1,8 +1,8 @@
 import { parseWonAmount } from "../http";
-import { DiscountType, VendorPriceResult } from "../types";
+import { VendorPriceResult } from "../types";
 import { VendorAdapter } from "./types";
 import { withVendorPage, waitForRealPage } from "../browserSession";
-import { extractCardName, resolveInstantDiscountType } from "./discount";
+import { buildConditionalDiscount } from "./discount";
 
 const ORIGINAL_PRICE_SELECTOR = ".price_real, .price_original";
 const COUPON_PRICE_SELECTOR = ".price_coupon";
@@ -12,7 +12,8 @@ const DELIVERY_SELECTOR = '[class*="delivery-info"]';
 /**
  * 옥션은 G마켓과 같은 이베이코리아 인프라를 써서 두 종류의 할인이 각각 따로 걸릴 수 있다:
  * 쿠폰적용가(.price_coupon)와 카드/결제수단 즉시할인가(.box__payment-discount, G마켓과 동일
- * 마크업). 둘 다 있으면 실제로 더 싸게 사는 쪽(더 낮은 가격)을 실구매가로 채택한다. 활성
+ * 마크업). 쿠폰은 누구나 받으므로 finalPrice에 반영하고, 즉시할인은 해당 결제수단을 쓸
+ * 때만 적용되므로 쿠폰가보다 더 쌀 때만 conditionalDiscount로 따로 내린다. 활성
  * 쿠폰/즉시할인이 없는 상품은 각 selector가 없거나 판매가와 같아 판매가를 그대로 쓴다.
  * 정가 표시도 상품/카테고리별로 마크업이 달라 가전 등은 .price_real, 패션 등은
  * .price_original을 쓴다(2026-08 여러 카테고리 상품 크롤링으로 확인, browserSession.ts 참고).
@@ -42,21 +43,8 @@ export const fetchAuctionPrice: VendorAdapter = async (url) => {
         .catch(() => null);
       const paymentDiscountPrice = parseWonAmount(paymentDiscountText);
 
-      let finalPrice = originalPrice;
-      let discountType: DiscountType = "none";
-      let cardName: string | null = null;
-
-      if (paymentDiscountPrice !== null && paymentDiscountPrice < finalPrice) {
-        finalPrice = paymentDiscountPrice;
-        cardName = extractCardName(paymentDiscountText ?? "");
-        discountType = resolveInstantDiscountType(cardName);
-      }
-      if (couponPrice !== null && couponPrice < finalPrice) {
-        finalPrice = couponPrice;
-        cardName = null;
-        discountType = "coupon";
-      }
-
+      const hasCoupon = couponPrice !== null && couponPrice < originalPrice;
+      const finalPrice = hasCoupon ? couponPrice : originalPrice;
       const couponDiscount = originalPrice - finalPrice;
 
       const deliveryText = await page
@@ -70,8 +58,13 @@ export const fetchAuctionPrice: VendorAdapter = async (url) => {
         status: "success",
         originalPrice,
         couponDiscount,
-        discountType,
-        cardName,
+        discountType: hasCoupon ? "coupon" : "none",
+        conditionalDiscount: buildConditionalDiscount(
+          paymentDiscountText,
+          paymentDiscountPrice,
+          finalPrice,
+          shippingFee
+        ),
         shippingFee,
         finalPrice: finalPrice + (shippingFee ?? 0),
         productUrl: url,
@@ -91,7 +84,7 @@ function failedResult(url: string, error: string): VendorPriceResult {
     originalPrice: null,
     couponDiscount: null,
     discountType: "none",
-    cardName: null,
+    conditionalDiscount: null,
     shippingFee: null,
     finalPrice: null,
     productUrl: url,

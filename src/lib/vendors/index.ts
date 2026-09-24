@@ -20,15 +20,40 @@ const VENDOR_LABELS: Record<VendorKey, string> = {
   elevenst: "11번가",
 };
 
+/**
+ * 쿠팡은 Akamai Bot Manager가 세션 단위로 요청을 누적 평가해 요청이 잦을수록 차단되기 쉽다
+ * (vendor-bot-bypass 스킬 참고). 가격 신선도보다 차단 회피가 중요해 기본(5분)보다 길게 캐싱한다.
+ */
+const VENDOR_PRICE_TTL_MS: Partial<Record<VendorKey, number>> = {
+  coupang: 20 * 60 * 1000,
+};
+
+const globalForInflight = globalThis as unknown as {
+  __damoaInflightVendorPrices?: Map<string, Promise<VendorPriceResult>>;
+};
+const inflightVendorPrices = (globalForInflight.__damoaInflightVendorPrices ??= new Map());
+
 async function fetchVendorPriceCached(vendor: VendorKey, url: string): Promise<VendorPriceResult> {
   const cached = vendorPriceCache.get(url);
   if (cached) return cached;
 
-  const result = await VENDOR_ADAPTERS[vendor](url);
-  if (result.status === "success") {
-    vendorPriceCache.set(url, result);
+  // 같은 상품을 여러 탭/스트림이 동시에 조회하면 벤더 사이트에 한 번만 요청하고 결과를 나눠 쓴다.
+  const inflight = inflightVendorPrices.get(url);
+  if (inflight) return inflight;
+
+  const request = (async () => {
+    const result = await VENDOR_ADAPTERS[vendor](url);
+    if (result.status === "success") {
+      vendorPriceCache.set(url, result, VENDOR_PRICE_TTL_MS[vendor]);
+    }
+    return result;
+  })();
+  inflightVendorPrices.set(url, request);
+  try {
+    return await request;
+  } finally {
+    inflightVendorPrices.delete(url);
   }
-  return result;
 }
 
 function unavailableResult(vendor: VendorKey): VendorPriceResult {

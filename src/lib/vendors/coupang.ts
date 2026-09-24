@@ -1,8 +1,8 @@
-import { Page } from "puppeteer";
+import { HTTPResponse, Page } from "puppeteer";
 import { parseShippingFee, parseWonAmount } from "../http";
 import { ConditionalDiscount, VendorPriceResult } from "../types";
 import { VendorAdapter } from "./types";
-import { withVendorPage, waitForRealPage } from "../browserSession";
+import { withSharedVendorPage, waitForRealPage } from "../browserSession";
 
 const HOME_URL = "https://www.coupang.com/";
 const PRICE_LAYOUT_SELECTOR = ".price-container-v2 .price-layout-container";
@@ -15,18 +15,34 @@ interface PriceEntry {
 }
 
 /**
- * 쿠키 없이 상품 페이지로 바로 들어가면 CDP로 붙은 실제 Chrome도 403("사용권한이 없습니다")을
- * 받는다. 홈을 한 번 거쳐 세션 쿠키를 받으면 이후 상품 페이지는 통과한다(2026-09 검증).
- * 쿠키는 백그라운드 Chrome 프로필에 남으므로 홈 경유는 403을 받았을 때만 한다.
+ * 쿠팡의 403은 두 층에서 온다(2026-09 분석, vendor-bot-bypass 스킬 참고).
+ * "origin": Akamai는 통과했지만 쿠팡 원서버(server: envoy)가 거부. 세션 없이 상품 페이지로
+ *   바로 들어갈 때 확률적으로 나며, 홈을 한 번 거치면 풀린다.
+ * "akamai": Akamai Bot Manager(server: AkamaiGHost)가 세션을 봇으로 판정. 홈 경유나 쿠키
+ *   삭제로는 풀리지 않고 백그라운드 Chrome 프로세스를 재시작해야 풀린다.
  */
-async function gotoProductPage(page: Page, url: string): Promise<boolean> {
+type CoupangBlock = "origin" | "akamai";
+
+function detectBlock(response: HTTPResponse | null): CoupangBlock | null {
+  if (response?.status() !== 403) return null;
+  return response.headers().server?.includes("AkamaiGHost") ? "akamai" : "origin";
+}
+
+const BLOCK_MESSAGES: Record<CoupangBlock, string> = {
+  origin: "쿠팡이 요청을 거부했습니다(403). 잠시 후 다시 시도해 주세요.",
+  akamai: "쿠팡 봇 탐지(Akamai)에 차단되었습니다(403). 백그라운드 Chrome을 재시작해야 할 수 있습니다.",
+};
+
+/** 상품 페이지로 이동하고, 차단됐다면 그 종류를 반환한다. 홈 경유 재시도는 효과가 있는 origin 차단에만 한다. */
+async function gotoProductPage(page: Page, url: string): Promise<CoupangBlock | null> {
   const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
-  if (response?.status() !== 403) return true;
+  const block = detectBlock(response);
+  if (block !== "origin") return block;
 
   await page.goto(HOME_URL, { waitUntil: "domcontentloaded", timeout: 20000 });
   await new Promise((r) => setTimeout(r, 2000));
   const retry = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000, referer: HOME_URL });
-  return retry?.status() !== 403;
+  return detectBlock(retry);
 }
 
 /**
@@ -90,9 +106,11 @@ function buildCoupangConditionalDiscount(
  */
 export const fetchCoupangPrice: VendorAdapter = async (url) => {
   try {
-    return await withVendorPage(async (page) => {
-      if (!(await gotoProductPage(page, url))) {
-        return failedResult(url, "쿠팡 접근이 차단되었습니다(403).");
+    return await withSharedVendorPage("coupang", async (page) => {
+      const block = await gotoProductPage(page, url);
+      if (block) {
+        console.warn(`[coupang] 403 차단(${block}): ${url}`);
+        return failedResult(url, BLOCK_MESSAGES[block]);
       }
       await waitForRealPage(page);
       await page.waitForSelector(PRICE_LAYOUT_SELECTOR, { timeout: 8000 }).catch(() => null);

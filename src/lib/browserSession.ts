@@ -64,8 +64,14 @@ async function waitForDebugPort(timeoutMs = 15000): Promise<void> {
   throw new Error("백그라운드 Chrome 디버그 포트가 시간 내에 응답하지 않았습니다.");
 }
 
+interface SharedPage {
+  page: Page | null;
+  queue: Promise<unknown>;
+}
+
 const globalForBrowser = globalThis as unknown as {
   __damoaBrowserPromise?: Promise<Browser>;
+  __damoaSharedPages?: Map<string, SharedPage>;
 };
 
 async function connectBrowser(): Promise<Browser> {
@@ -76,6 +82,10 @@ async function connectBrowser(): Promise<Browser> {
   const browser = await puppeteer.connect({ browserURL: DEBUG_URL });
   browser.once("disconnected", () => {
     globalForBrowser.__damoaBrowserPromise = undefined;
+    // 끊긴 연결의 Page 객체는 다시 쓸 수 없으므로 공유 탭도 버린다.
+    globalForBrowser.__damoaSharedPages?.forEach((shared) => {
+      shared.page = null;
+    });
   });
   return browser;
 }
@@ -104,6 +114,40 @@ export async function withVendorPage<T>(fn: (page: Page) => Promise<T>): Promise
   } finally {
     await page.close().catch(() => {});
   }
+}
+
+/**
+ * key마다 탭 하나를 계속 재사용하고, 그 탭을 쓰는 작업은 한 번에 하나씩 순서대로 실행한다.
+ * 쿠팡처럼 요청 빈도에 민감한 벤더에서 요청마다 탭을 여닫거나 여러 탭으로 동시에 요청하는
+ * 패턴을 없애기 위함이다. 작업이 실패하면 탭 상태를 믿을 수 없어 닫고 다음 작업에서 새로 연다.
+ */
+export function withSharedVendorPage<T>(key: string, fn: (page: Page) => Promise<T>): Promise<T> {
+  const sharedPages = (globalForBrowser.__damoaSharedPages ??= new Map());
+  let shared = sharedPages.get(key);
+  if (!shared) {
+    shared = { page: null, queue: Promise.resolve() };
+    sharedPages.set(key, shared);
+  }
+  const entry = shared;
+
+  const run = async (): Promise<T> => {
+    if (!entry.page || entry.page.isClosed()) {
+      const browser = await getBrowser();
+      entry.page = await browser.newPage();
+      await entry.page.setViewport({ width: 1280, height: 800 });
+    }
+    try {
+      return await fn(entry.page);
+    } catch (error) {
+      await entry.page?.close().catch(() => {});
+      entry.page = null;
+      throw error;
+    }
+  };
+
+  const result = entry.queue.then(run, run);
+  entry.queue = result.catch(() => {});
+  return result;
 }
 
 const INTERSTITIAL_TITLE_MARKERS = ["기다리십시오", "잠시만"];

@@ -15,7 +15,7 @@ description: 쿠팡/G마켓/옥션 스크래핑이 403이나 봇 탐지 인터�
 - 화면 밖(`--window-position`)에 배치해 사용자 작업을 방해하지 않는다.
 - Next.js 서버와 분리(detached)되어 서버 재시작 후에도 살아있는다(콜드 스타트로 인한 반복적인 봇 확인 페이지를 줄이기 위함).
 
-`coupang.ts`/`gmarket.ts`/`auction.ts`는 이 세션 위에서 `page.$eval`로 실제 렌더링된 DOM에서 가격을 추출한다. G마켓은 첫 진입 시 "봇 확인 중" 인터스티셜이 뜰 수 있어 `waitForRealPage()`로 통과를 기다린 뒤 파싱한다.
+`coupang.ts`/`gmarket.ts`/`auction.ts`는 이 세션 위에서 `page.$eval`로 실제 렌더링된 DOM에서 가격을 추출한다. G마켓은 첫 진입 시 "봇 확인 중" 인터스티셜이 뜰 수 있어 `waitForRealPage()`로 통과를 기다린 뒤 파싱한다. 쿠팡은 CDP 연결 Chrome으로도 상품 페이지에 바로 들어가면 가끔 403("요청하신 페이지의 사용권한이 없습니다", 제목 "쿠팡!")을 받는데, 홈(`https://www.coupang.com/`)을 한 번 거친 뒤 다시 들어가면 통과한다(2026-09 확인). `coupang.ts#gotoProductPage`가 403일 때만 이 재시도를 한다.
 
 ## 트러블슈팅
 

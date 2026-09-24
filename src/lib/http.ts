@@ -45,12 +45,13 @@ export function parseWonAmount(text: string | null | undefined): number | null {
   return parseInt(match[1], 10);
 }
 
-const SHIPPING_FEE_PATTERN = /배송비\s*([\d,]+)\s*원/;
+const SHIPPING_FEE_PATTERN = /(?<!추가\s?)배송비[^\d\n]{0,12}?([\d,]+)\s*원/;
 
 /**
- * 배송 안내 문구에서 기본 배송비를 뽑는다. "무료배송"이 있으면 0, "배송비 3,100원"처럼
- * 금액이 붙어 있으면 그 금액이다. "제주지역 5,000원" 같은 지역별 추가 배송비는 "배송비"
- * 바로 뒤에 붙지 않아 걸리지 않는다. 둘 다 없으면 판단할 수 없어 null을 반환한다.
+ * 배송 안내 문구에서 기본 배송비를 뽑는다. "무료배송"이 있으면 0, "배송비 3,100원"이나
+ * 옥션의 "배송비 주문시 결제 (3,000원)"처럼 "배송비" 뒤 짧은 문구 안에 금액이 있으면 그 금액이다.
+ * "추가 배송비"는 제외하고 사이 문구 길이도 제한해 "배송비 안내 도서산간 추가 배송비 제주지역 5,000원"이나
+ * "추가배송비 제주도 : 3,000 원" 같은 지역별 추가 배송비는 걸리지 않게 한다. 둘 다 없으면 null이다.
  */
 export function parseShippingFee(text: string | null | undefined): number | null {
   if (!text) return null;

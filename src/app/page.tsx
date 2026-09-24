@@ -5,13 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import SearchBar from "@/components/SearchBar";
 import ProductCard from "@/components/ProductCard";
-import { SearchResultItem } from "@/lib/types";
-
-async function fetchSearchResults(query: string): Promise<SearchResultItem[]> {
-  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-  if (!res.ok) throw new Error("검색에 실패했습니다.");
-  return res.json();
-}
+import { fetchSearchResults } from "@/lib/searchApi";
 
 export default function Home() {
   return (

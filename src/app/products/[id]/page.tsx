@@ -3,7 +3,10 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import PriceComparisonTable from "@/components/PriceComparisonTable";
+import { useQuery } from "@tanstack/react-query";
+import PriceComparisonList from "@/components/PriceComparisonList";
+import ProductSummary from "@/components/ProductSummary";
+import { fetchSearchResults } from "@/lib/searchApi";
 import { ProductPriceComparison, VENDOR_LABELS, VendorKey, VendorPriceResult } from "@/lib/types";
 
 const VENDOR_KEYS = Object.keys(VENDOR_LABELS) as VendorKey[];
@@ -47,12 +50,23 @@ function ProductDetailContent({ id }: { id: string }) {
   const [lowestPrice, setLowestPrice] = useState<VendorPriceResult | null>(null);
   const [lowestConditionalPrice, setLowestConditionalPrice] = useState<VendorPriceResult | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [isDone, setIsDone] = useState(false);
+
+  // 상세 페이지는 상품 정보를 따로 조회하지 않고, 검색 페이지와 같은 쿼리 키로 검색 결과를
+  // 재사용한다(검색에서 넘어온 경우 React Query 캐시에 이미 있다).
+  const { data: searchResults } = useQuery({
+    queryKey: ["search", query],
+    queryFn: () => fetchSearchResults(query ?? ""),
+    enabled: Boolean(query),
+  });
+  const product = searchResults?.find((item) => item.id === Number(id)) ?? null;
 
   useEffect(() => {
     setResults(initialResults());
     setLowestPrice(null);
     setLowestConditionalPrice(null);
     setStreamError(null);
+    setIsDone(false);
 
     const source = new EventSource(`/api/products/${id}/prices/stream`);
 
@@ -65,6 +79,7 @@ function ProductDetailContent({ id }: { id: string }) {
       const comparison: ProductPriceComparison = JSON.parse((event as MessageEvent).data);
       setLowestPrice(comparison.lowestPrice);
       setLowestConditionalPrice(comparison.lowestConditionalPrice);
+      setIsDone(true);
       source.close();
     });
 
@@ -76,34 +91,37 @@ function ProductDetailContent({ id }: { id: string }) {
       } else {
         setStreamError("가격 비교 서버와의 연결이 끊어졌습니다.");
       }
+      setIsDone(true);
       source.close();
     });
 
     return () => source.close();
   }, [id]);
 
-  const data: ProductPriceComparison = {
-    productId: Number(id),
-    results: VENDOR_KEYS.map((vendor) => results[vendor]),
-    lowestPrice,
-    lowestConditionalPrice,
-  };
+  const resultList = VENDOR_KEYS.map((vendor) => results[vendor]);
+  const checkedCount = resultList.filter((r) => r.status !== "pending").length;
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-16">
+    <main className="mx-auto flex max-w-2xl flex-col gap-5 px-4 py-10 sm:py-16">
       <Link href={backHref} className="text-sm text-neutral-500 hover:underline">
         ← 검색 결과로 돌아가기
       </Link>
 
-      <div>
-        <h1 className="text-xl font-bold">판매처별 실구매가 비교</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          각 오픈마켓 상품 페이지를 실시간으로 확인해 쿠폰 할인이 반영된 가격을 비교합니다.
-        </p>
+      <ProductSummary product={product} lowestPrice={lowestPrice} isDone={isDone} />
+
+      <div className="flex items-baseline justify-between">
+        <h2 className="font-semibold">판매처별 실구매가</h2>
+        <span className="text-xs text-neutral-500">
+          {isDone ? "확인 완료" : `${VENDOR_KEYS.length}곳 중 ${checkedCount}곳 확인`}
+        </span>
       </div>
 
       {streamError && <p className="text-center text-sm text-red-500">{streamError}</p>}
-      <PriceComparisonTable data={data} />
+      <PriceComparisonList
+        results={resultList}
+        lowestPrice={lowestPrice}
+        lowestConditionalPrice={lowestConditionalPrice}
+      />
     </main>
   );
 }

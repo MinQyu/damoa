@@ -27,13 +27,13 @@ Next.js 14 App Router + TypeScript, Tailwind CSS, 클라이언트 데이터 페�
 
 1. **검색** (`/` → `GET /api/search?q=`) — `lib/danawa.ts#searchDanawa`가 cheerio로 `search.danawa.com`을 스크래핑하여 `SearchResultItem[]`을 반환한다 (id는 다나와의 `pcode`).
 2. **벤더 URL 확인** (`GET /api/products/[id]/urls`) — `lib/danawa.ts#fetchVendorUrls`가 다나와 상품 상세 페이지(`prod.danawa.com/info/?pcode=`)를 로드하여 "구매하기" 판매처 목록에서 각 오픈마켓의 `link_pcode`를 추출한다. 쿠팡은 브리지 URL을 한 번 더 거쳐 `pageKey`를 실제 상품 URL로 변환해야 한다(`resolveCoupangProductUrl`). 이 라우트는 대부분 `/prices`에서 대체되었는데, 이 라우트가 내부적으로 동일한 URL 확인 작업을 수행하기 때문이다.
-3. **가격 비교** (`/products/[id]` → `GET /api/products/[id]/prices/stream`) — (캐시된) 벤더 URL을 확인한 뒤 `lib/vendors#streamVendorPrices`를 호출한다. 이 함수는 모든 벤더 어댑터를 병렬 실행하여 한 벤더가 실패하거나 타임아웃되어도 다른 벤더를 막지 않으며, 벤더 하나가 끝날 때마다 결과를 콜백으로 즉시 넘겨 SSE `vendor` 이벤트로 스트리밍한다. 프론트엔드는 각 벤더를 `pending` 상태로 먼저 그린 뒤 이 이벤트를 받아 갱신한다. 전체가 끝나면 `status === "success"`인 항목들 중 `finalPrice`가 가장 낮은 `lowestPrice`를 계산해 `done` 이벤트로 보낸다. 한 번에 전체 JSON을 반환하는 `GET /api/products/[id]/prices`(`fetchAllVendorPrices`)도 다른 소비처를 위해 유지된다 — 두 라우트 모두 `lib/vendors/index.ts`의 `resolveVendorPrice`/`computeLowestPrice`를 공유한다.
+3. **가격 비교** (`/products/[id]` → `GET /api/products/[id]/prices/stream`) — (캐시된) 벤더 URL을 확인한 뒤 `lib/vendors#streamVendorPrices`를 호출한다. 이 함수는 모든 벤더 어댑터를 병렬 실행하여 한 벤더가 실패하거나 타임아웃되어도 다른 벤더를 막지 않으며, 벤더 하나가 끝날 때마다 결과를 콜백으로 즉시 넘겨 SSE `vendor` 이벤트로 스트리밍한다. 프론트엔드는 각 벤더를 `pending` 상태로 먼저 그린 뒤 이 이벤트를 받아 갱신한다. 전체가 끝나면 `status === "success"`인 항목들 중 `finalPrice`가 가장 낮은 `lowestPrice`와, 조건부 할인가(`conditionalDiscount.price`)가 그보다 더 낮은 판매처 `lowestConditionalPrice`를 계산해 `done` 이벤트로 보낸다. 한 번에 전체 JSON을 반환하는 `GET /api/products/[id]/prices`(`fetchAllVendorPrices`)도 다른 소비처를 위해 유지된다 — 두 라우트 모두 `lib/vendors/index.ts`의 `resolveVendorPrice`/`computeLowestPrice`를 공유한다.
 
 ### 벤더 어댑터 (`lib/vendors/`)
 
 각 벤더는 공통 `VendorAdapter` 타입(`lib/vendors/types.ts`)을 구현하는 자체 파일(`coupang.ts`, `gmarket.ts`, `auction.ts`, `elevenst.ts`)을 가진다: `(url: string) => Promise<VendorPriceResult>`. 이들은 `lib/vendors/index.ts#VENDOR_ADAPTERS`에 등록된다. 새 벤더를 엔드투엔드로 추가하는 절차는 `add-vendor` 스킬을 참고한다.
 
-모든 어댑터는 각 사이트가 가격 데이터를 어떻게 구조화하든(예: 11번가는 `og:description` 메타 + 취소선 엘리먼트를 통해 `originalPrice`/`couponDiscount` 분리 정보를 노출하지만, 다른 사이트는 단일 가격만 노출할 수 있음) 공통 `VendorPriceResult` 형태(`lib/types.ts`)로 정규화한다. `status`는 `success | failed | unavailable` 중 하나다 — `unavailable`은 애초에 벤더 URL이 존재하지 않았음을, `failed`는 fetch/parse 시도 자체가 깨졌음을 의미한다.
+모든 어댑터는 각 사이트가 가격 데이터를 어떻게 구조화하든(예: 11번가는 `og:description` 메타 + 취소선 엘리먼트를 통해 `originalPrice`/`couponDiscount` 분리 정보를 노출하지만, 다른 사이트는 단일 가격만 노출할 수 있음) 공통 `VendorPriceResult` 형태(`lib/types.ts`)로 정규화한다. `status`는 `success | failed | unavailable` 중 하나다 — `unavailable`은 애초에 벤더 URL이 존재하지 않았음을, `failed`는 fetch/parse 시도 자체가 깨졌음을 의미한다. `finalPrice`에는 누구나 받는 공통 할인(쿠폰)만 반영하고, 카드사·결제수단 즉시할인처럼 사용자마다 적용 여부가 다른 할인은 `conditionalDiscount`(`lib/vendors/discount.ts#buildConditionalDiscount`)로 분리한다.
 
 쿠팡/G마켓/옥션은 일반 `fetch`나 headless 브라우저로 접근하면 봇 탐지에 걸려 403이 반환되므로, `lib/browserSession.ts`가 사용자 백그라운드의 실제 Chrome에 CDP로 연결해 우회한다. 이 메커니즘과 트러블슈팅은 `vendor-bot-bypass` 스킬을 참고한다.
 

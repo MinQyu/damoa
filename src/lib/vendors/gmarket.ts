@@ -2,7 +2,7 @@ import { parseWonAmount } from "../http";
 import { VendorPriceResult } from "../types";
 import { VendorAdapter } from "./types";
 import { withVendorPage, waitForRealPage } from "../browserSession";
-import { extractCardName, resolveInstantDiscountType } from "./discount";
+import { buildConditionalDiscount } from "./discount";
 
 const ORIGINAL_PRICE_SELECTOR = ".price_real";
 const PAYMENT_DISCOUNT_SELECTOR = ".box__payment-discount:not(.box__payment-discount--reward)";
@@ -10,9 +10,9 @@ const DELIVERY_SELECTOR = '[class*="delivery-info"]';
 
 /**
  * G마켓은 실제 Chrome CDP 연결로는 접근되지만 첫 진입 시 "봇 확인 중" 인터스티셜을
- * 거친다(2026-08 검증, browserSession.ts#waitForRealPage 참고). 판매가(.price_real) 대비
- * 카드 결제수단 즉시할인가(.box__payment-discount)가 더 낮으면 그걸 실구매가로 본다.
- * 이 즉시할인이 없는 상품도 있어 그 경우 판매가를 그대로 실구매가로 취급한다.
+ * 거친다(2026-08 검증, browserSession.ts#waitForRealPage 참고). 판매가(.price_real)가
+ * 누구나 받는 실구매가이고, 카드/결제수단 즉시할인가(.box__payment-discount)는 해당
+ * 결제수단을 쓸 때만 적용되므로 finalPrice에 섞지 않고 conditionalDiscount로 따로 내린다.
  */
 export const fetchGmarketPrice: VendorAdapter = async (url) => {
   try {
@@ -33,11 +33,6 @@ export const fetchGmarketPrice: VendorAdapter = async (url) => {
         .$eval(PAYMENT_DISCOUNT_SELECTOR, (el) => el.textContent ?? "")
         .catch(() => null);
       const discountPrice = parseWonAmount(discountText);
-      const hasInstantDiscount = discountPrice !== null && discountPrice < originalPrice;
-      const finalPrice = hasInstantDiscount ? discountPrice : originalPrice;
-      const couponDiscount = originalPrice - finalPrice;
-      const cardName = hasInstantDiscount ? extractCardName(discountText ?? "") : null;
-      const discountType = hasInstantDiscount ? resolveInstantDiscountType(cardName) : "none";
 
       const deliveryText = await page
         .$eval(DELIVERY_SELECTOR, (el) => el.textContent ?? "")
@@ -49,11 +44,11 @@ export const fetchGmarketPrice: VendorAdapter = async (url) => {
         vendorName: "G마켓",
         status: "success",
         originalPrice,
-        couponDiscount,
-        discountType,
-        cardName,
+        couponDiscount: 0,
+        discountType: "none",
+        conditionalDiscount: buildConditionalDiscount(discountText, discountPrice, originalPrice, shippingFee),
         shippingFee,
-        finalPrice: finalPrice + (shippingFee ?? 0),
+        finalPrice: originalPrice + (shippingFee ?? 0),
         productUrl: url,
       };
       return result;
@@ -71,7 +66,7 @@ function failedResult(url: string, error: string): VendorPriceResult {
     originalPrice: null,
     couponDiscount: null,
     discountType: "none",
-    cardName: null,
+    conditionalDiscount: null,
     shippingFee: null,
     finalPrice: null,
     productUrl: url,

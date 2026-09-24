@@ -34,13 +34,13 @@ export type DiscountType = "coupon" | "none";
 /**
  * 특정 결제수단을 써야만 받을 수 있어 사용자마다 적용 여부가 달라지는 할인
  * (overview.md 4.4절). 누구나 받는 공통 실구매가(finalPrice)와 섞지 않고 따로 보여준다.
- * "card": 특정 카드사 결제 시 즉시할인(cardName에 카드사명이 채워짐).
+ * "card": 카드 결제 시 즉시할인(카드사를 알 수 있으면 cardName에 채워짐).
  * "payment": 카드사를 특정할 수 없는 결제수단(스마일페이 등) 즉시할인.
  */
 export interface ConditionalDiscount {
   type: "card" | "payment";
   cardName: string | null;
-  /** 이 조건을 충족했을 때의 결제가(배송비 포함). 항상 finalPrice보다 낮다. */
+  /** 이 조건을 충족했을 때의 결제가(배송비 포함). 항상 finalPrice보다 낮다. 쿠팡처럼 "최대" 기준가만 노출하는 판매처도 있다. */
   price: number;
 }
 

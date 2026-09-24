@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { fetchHtml } from "../http";
+import { fetchHtml, parseShippingFee } from "../http";
 import { VendorPriceResult } from "../types";
 import { VendorAdapter } from "./types";
 
@@ -29,7 +29,7 @@ export const fetchElevenstPrice: VendorAdapter = async (url) => {
     const couponDiscount = originalPrice > finalPrice ? originalPrice - finalPrice : 0;
 
     const deliveryText = $(".delivery").first().text();
-    const shippingFee = deliveryText.includes("무료배송") ? 0 : null;
+    const shippingFee = parseShippingFee(deliveryText);
 
     return {
       vendor: "elevenst",

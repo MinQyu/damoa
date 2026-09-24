@@ -44,3 +44,17 @@ export function parseWonAmount(text: string | null | undefined): number | null {
   if (!match) return null;
   return parseInt(match[1], 10);
 }
+
+const SHIPPING_FEE_PATTERN = /배송비\s*([\d,]+)\s*원/;
+
+/**
+ * 배송 안내 문구에서 기본 배송비를 뽑는다. "무료배송"이 있으면 0, "배송비 3,100원"처럼
+ * 금액이 붙어 있으면 그 금액이다. "제주지역 5,000원" 같은 지역별 추가 배송비는 "배송비"
+ * 바로 뒤에 붙지 않아 걸리지 않는다. 둘 다 없으면 판단할 수 없어 null을 반환한다.
+ */
+export function parseShippingFee(text: string | null | undefined): number | null {
+  if (!text) return null;
+  if (text.includes("무료배송")) return 0;
+  const match = text.match(SHIPPING_FEE_PATTERN);
+  return match ? parseWonAmount(match[1]) : null;
+}

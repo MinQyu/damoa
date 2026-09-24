@@ -19,7 +19,7 @@ function formatDiscountType(r: VendorPriceResult) {
 }
 
 function formatCondition(discount: ConditionalDiscount) {
-  if (discount.type === "card") return `${discount.cardName} 결제 시`;
+  if (discount.type === "card") return discount.cardName ? `${discount.cardName} 결제 시` : "카드 즉시할인 시";
   return "특정 결제수단 이용 시";
 }
 

@@ -39,7 +39,7 @@ Next.js 14 App Router + TypeScript, Tailwind CSS, 클라이언트 데이터 페�
 
 ### 캐싱 (`lib/cache.ts`)
 
-단순한 `TTLCache<T>`(Map + 만료 타임스탬프, 외부 저장소 없음). 세 개의 인스턴스가 `globalThis`에 저장된다(Next.js 개발 모드의 HMR 모듈 재평가에도 살아남기 위함): `searchCache`(5분), `vendorUrlCache`(30분), `vendorPriceCache`(5분, `status === "success"`일 때만 채워짐). 이는 프로세스 로컬 캐시이므로 서버리스 인스턴스 간 상태를 공유하지 않으며 재시작 시 사라진다. `README.md`에는 다음 단계로 Redis로 옮기는 방안이 언급되어 있다.
+단순한 `TTLCache<T>`(Map + 만료 타임스탬프, 외부 저장소 없음). 세 개의 인스턴스가 `globalThis`에 저장된다(Next.js 개발 모드의 HMR 모듈 재평가에도 살아남기 위함): `searchCache`(5분), `vendorUrlCache`(30분), `vendorPriceCache`(5분, 쿠팡만 20분, `status === "success"`일 때만 채워짐). `TTLCache#set`은 항목별 TTL을 받을 수 있다. 이는 프로세스 로컬 캐시이므로 서버리스 인스턴스 간 상태를 공유하지 않으며 재시작 시 사라진다. `README.md`에는 다음 단계로 Redis로 옮기는 방안이 언급되어 있다.
 
 ### HTTP 레이어 (`lib/http.ts`)
 

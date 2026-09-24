@@ -3,10 +3,10 @@ import { VendorPriceResult } from "../types";
 import { VendorAdapter } from "./types";
 import { withVendorPage, waitForRealPage } from "../browserSession";
 import { buildConditionalDiscount } from "./discount";
+import { fetchEbayKoreaShippingFee } from "./ebayKorea";
 
 const ORIGINAL_PRICE_SELECTOR = ".price_real";
 const PAYMENT_DISCOUNT_SELECTOR = ".box__payment-discount:not(.box__payment-discount--reward)";
-const DELIVERY_SELECTOR = '[class*="delivery-info"]';
 
 /**
  * G마켓은 실제 Chrome CDP 연결로는 접근되지만 첫 진입 시 "봇 확인 중" 인터스티셜을
@@ -34,10 +34,7 @@ export const fetchGmarketPrice: VendorAdapter = async (url) => {
         .catch(() => null);
       const discountPrice = parseWonAmount(discountText);
 
-      const deliveryText = await page
-        .$eval(DELIVERY_SELECTOR, (el) => el.textContent ?? "")
-        .catch(() => "");
-      const shippingFee = deliveryText.includes("무료배송") ? 0 : null;
+      const shippingFee = await fetchEbayKoreaShippingFee(page);
 
       const result: VendorPriceResult = {
         vendor: "gmarket",

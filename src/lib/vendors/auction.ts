@@ -3,11 +3,11 @@ import { VendorPriceResult } from "../types";
 import { VendorAdapter } from "./types";
 import { withVendorPage, waitForRealPage } from "../browserSession";
 import { buildConditionalDiscount } from "./discount";
+import { fetchEbayKoreaShippingFee } from "./ebayKorea";
 
 const ORIGINAL_PRICE_SELECTOR = ".price_real, .price_original";
 const COUPON_PRICE_SELECTOR = ".price_coupon";
 const PAYMENT_DISCOUNT_SELECTOR = ".box__payment-discount:not(.box__payment-discount--reward)";
-const DELIVERY_SELECTOR = '[class*="delivery-info"]';
 
 /**
  * 옥션은 G마켓과 같은 이베이코리아 인프라를 써서 두 종류의 할인이 각각 따로 걸릴 수 있다:
@@ -47,10 +47,7 @@ export const fetchAuctionPrice: VendorAdapter = async (url) => {
       const finalPrice = hasCoupon ? couponPrice : originalPrice;
       const couponDiscount = originalPrice - finalPrice;
 
-      const deliveryText = await page
-        .$eval(DELIVERY_SELECTOR, (el) => el.textContent ?? "")
-        .catch(() => "");
-      const shippingFee = deliveryText.includes("무료배송") ? 0 : null;
+      const shippingFee = await fetchEbayKoreaShippingFee(page);
 
       const result: VendorPriceResult = {
         vendor: "auction",

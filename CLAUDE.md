@@ -48,7 +48,7 @@ Next.js 14 App Router + TypeScript, Tailwind CSS, 클라이언트 데이터 페�
 ### 프론트엔드
 
 - `app/page.tsx` — 검색 페이지, 클라이언트 컴포넌트, 원본 쿼리 문자열을 키로 사용하는(디바운스 없는) `useQuery`이며 쿼리가 비어있지 않을 때만 활성화된다.
-- `app/products/[id]/page.tsx` — 가격 비교 페이지, 마운트 시 `EventSource`로 `/api/products/[id]/prices/stream`을 구독해 벤더별 상태를 실시간으로 갱신한다.
+- `app/products/[id]/page.tsx` — 가격 비교 페이지, 마운트 시 `EventSource`로 `/api/products/[id]/prices/stream`을 구독해 벤더별 상태를 실시간으로 갱신한다. 상단 상품 정보(`components/ProductSummary.tsx`)는 따로 조회하지 않고 URL의 `q`로 검색 페이지와 같은 `["search", q]` 쿼리를 재사용해 `id`로 찾는다(`q`가 없으면 표시하지 않음). 판매처 목록은 `components/PriceComparisonList.tsx`의 카드 리스트로, 실구매가순으로 정렬하고 가격 구성(상품가 − 할인 + 배송비)을 보여준다.
 - `components/QueryProvider.tsx` — 앱을 `QueryClientProvider`(5분 `staleTime`, retry: 1)와 React Query Devtools로 감싸며, `app/layout.tsx`에 마운트되어 있다.
 - 경로 별칭 `@/*` → `src/*` (`tsconfig.json` 참고).
 
